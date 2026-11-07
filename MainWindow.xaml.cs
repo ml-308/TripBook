@@ -369,13 +369,13 @@ namespace TripBook
                 Width = w.w;
                 Height = w.h;
             }
-            if (!double.IsNaN(w.x) && !double.IsNaN(w.y) &&
-                w.x > SystemParameters.VirtualScreenLeft - 50 &&
-                w.y > SystemParameters.VirtualScreenTop - 50)
+            if (w.x.HasValue && w.y.HasValue &&
+                w.x.Value > SystemParameters.VirtualScreenLeft - 50 &&
+                w.y.Value > SystemParameters.VirtualScreenTop - 50)
             {
                 WindowStartupLocation = WindowStartupLocation.Manual;
-                Left = w.x;
-                Top = w.y;
+                Left = w.x.Value;
+                Top = w.y.Value;
             }
             if (w.max) WindowState = System.Windows.WindowState.Maximized;
         }

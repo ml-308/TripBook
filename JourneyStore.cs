@@ -19,8 +19,9 @@ namespace TripBook
     {
         public double w { get; set; }
         public double h { get; set; }
-        public double x { get; set; } = double.NaN;
-        public double y { get; set; } = double.NaN;
+        // 用可空类型：窗口尚未定位时写 null，避免 Newtonsoft 序列化 NaN 抛异常
+        public double? x { get; set; }
+        public double? y { get; set; }
         public bool max { get; set; }
     }
 
@@ -62,15 +63,41 @@ namespace TripBook
             }
         }
 
+        static string _configDir;
+
+        /// <summary>配置目录：优先 %APPDATA%\TripBook，不可写时依次回退（保证便携使用也正常）</summary>
         public static string ConfigDir
         {
             get
             {
-                var b = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData);
-                var p = Path.Combine(b, AppName);
-                Directory.CreateDirectory(p);
-                return p;
+                if (_configDir != null) return _configDir;
+                _configDir = ResolveConfigDir();
+                return _configDir;
             }
+        }
+
+        static string ResolveConfigDir()
+        {
+            var candidates = new List<string>();
+            var roaming = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData);
+            if (!string.IsNullOrEmpty(roaming)) candidates.Add(Path.Combine(roaming, AppName));
+            var local = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
+            if (!string.IsNullOrEmpty(local)) candidates.Add(Path.Combine(local, AppName));
+            candidates.Add(Path.Combine(AppDir, "config"));
+
+            foreach (var dir in candidates)
+            {
+                try
+                {
+                    Directory.CreateDirectory(dir);
+                    var probe = Path.Combine(dir, ".wtest");
+                    File.WriteAllText(probe, "ok");
+                    File.Delete(probe);
+                    return dir;
+                }
+                catch { }
+            }
+            return candidates[0];
         }
 
         static bool IsWritable(string dir)
