@@ -93,6 +93,29 @@ POV:
 
 ---
 
+## 安装（可选）
+
+只想双击 exe 用，跳过本节即可。要装进系统（开始菜单 / 卸载项 / 快捷方式），用安装包：
+
+**TripBook-Setup-1.1.0.exe** —— Inno Setup 6 构建的向导式安装包，页面顺序固定：
+
+> 欢迎 → 许可协议（MIT）→ 安装位置 → 附加任务 → 准备安装 → 安装进度 → 完成
+
+界面为简体中文，系统语言非中文时自动切 English。
+
+* 默认装到 `%LOCALAPPDATA%\Programs\TripBook`，路径可改，**不需要管理员权限**
+* 附加任务：创建桌面快捷方式、创建开始菜单快捷方式
+* 完成页可勾选「立即运行」；卸载走「设置 → 应用 → 已安装的应用」或安装目录下的 `unins000.exe`
+
+静默安装 / 卸载（脚本分发用）：
+
+```bat
+TripBook-Setup-1.1.0.exe /VERYSILENT /SUPPRESSMSGBOXES /TASKS="desktopicon,startmenuicon"
+"%LOCALAPPDATA%\Programs\TripBook\unins000.exe" /VERYSILENT
+```
+
+---
+
 ## 从源码构建
 
 需要 .NET SDK 6.0 或更高（目标框架 .NET Framework 4.8，Windows 自带运行时）：
