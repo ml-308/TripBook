@@ -20,3 +20,4 @@ docs_screenshot.png
 # Fody generated
 FodyWeavers.xsd
 tests/sample_report.html
+tests/DialogPreview/dialog.png
