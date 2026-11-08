@@ -295,6 +295,38 @@ namespace TripBook
             Save();
         }
 
+        /// <summary>批量删除，返回实际删除条数（只写一次盘）。</summary>
+        public int DeleteMany(IEnumerable<string> ids)
+        {
+            var set = new HashSet<string>(ids ?? Enumerable.Empty<string>());
+            if (set.Count == 0) return 0;
+            int n = Journeys.RemoveAll(j => set.Contains(j.id));
+            if (n > 0) Save();
+            return n;
+        }
+
+        /// <summary>批量把所选行程的年份改为 year（保留月日；2-29 遇平年收敛到 2-28）。返回修改条数。</summary>
+        public int ChangeYear(IEnumerable<string> ids, int year)
+        {
+            var set = new HashSet<string>(ids ?? Enumerable.Empty<string>());
+            if (set.Count == 0 || year < 1900 || year > 2200) return 0;
+            int n = 0;
+            var now = DateTime.Now.ToString("yyyy-MM-ddTHH:mm:ss");
+            foreach (var j in Journeys)
+            {
+                if (!set.Contains(j.id)) continue;
+                DateTime d;
+                if (!DateTime.TryParse(j.date, out d)) continue;
+                int max = DateTime.DaysInMonth(year, d.Month);
+                int day = d.Day > max ? max : d.Day;
+                j.date = new DateTime(year, d.Month, day).ToString("yyyy-MM-dd");
+                j.updated_at = now;
+                n++;
+            }
+            if (n > 0) { Sort(); Save(); }
+            return n;
+        }
+
         public Journey Get(string id)
         {
             if (string.IsNullOrEmpty(id)) return null;

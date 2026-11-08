@@ -149,6 +149,67 @@ namespace TripBook
         }
     }
 
+    /// <summary>POV 汇总里的一行（纯数据，不依赖 WPF）</summary>
+    public class PovSummaryRow
+    {
+        public string Date { get; set; } = "";
+        public string JourneyTitle { get; set; } = "";
+        public string Line { get; set; } = "";
+        public string Segment { get; set; } = "";
+        public string Vehicle { get; set; } = "";
+        public string Tag { get; set; } = "";
+    }
+
+    /// <summary>跨行程的 POV 总结（纯逻辑，可在无 WPF 环境下测试）</summary>
+    public class PovSummary
+    {
+        public int SegmentCount { get; private set; }
+        public int LineCount { get; private set; }
+        public int VehicleCount { get; private set; }
+        public int JourneyCount { get; private set; }
+        public List<PovSummaryRow> Rows { get; private set; } = new List<PovSummaryRow>();
+        public bool HasRows { get { return Rows.Count > 0; } }
+
+        public static PovSummary Build(IEnumerable<Journey> journeys)
+        {
+            var s = new PovSummary();
+            var all = (journeys ?? Enumerable.Empty<Journey>()).Where(j => j != null).ToList();
+            var lines = new HashSet<string>();
+            var vehicles = new HashSet<string>();
+            int covered = 0;
+
+            foreach (var j in all.OrderByDescending(x => x.date ?? "").ThenBy(x => x.title ?? ""))
+            {
+                var pov = j.pov ?? new List<PovItem>();
+                if (pov.Count > 0) covered++;
+                foreach (var p in pov)
+                {
+                    if (p == null) continue;
+                    var ln = (p.line ?? "").Trim();
+                    var vh = (p.vehicle ?? "").Trim();
+                    if (ln.Length > 0) lines.Add(ln);
+                    if (vh.Length > 0) vehicles.Add(vh);
+
+                    s.Rows.Add(new PovSummaryRow
+                    {
+                        Date = (j.date ?? "").Length >= 10 ? j.date.Substring(5) : (j.date ?? ""),
+                        JourneyTitle = j.title ?? "",
+                        Line = ln,
+                        Segment = p.Segment ?? "",
+                        Vehicle = vh,
+                        Tag = p.tag ?? ""
+                    });
+                }
+            }
+
+            s.SegmentCount = s.Rows.Count;
+            s.LineCount = lines.Count;
+            s.VehicleCount = vehicles.Count;
+            s.JourneyCount = covered;
+            return s;
+        }
+    }
+
     public static class Fmt
     {
         public static string Duration(int? minutes)

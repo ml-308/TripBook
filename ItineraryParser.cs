@@ -23,7 +23,12 @@ namespace TripBook
         // 时间：可在行中任意位置出现（地铁合并行含两个时间）
         static readonly Regex TimeAnyRe = new Regex(@"(\d{1,2})\s*[:：]\s*(\d{1,2})", RegexOptions.Compiled);
         static readonly Regex TimeLeadRe = new Regex(@"^\s*(\d{1,2})\s*[:：]\s*(\d{1,2})", RegexOptions.Compiled);
+        // 中文/连写时间写法：11点56分、11时56分、1156（仅行首）
+        static readonly Regex TimeCnRe = new Regex(@"^\s*(\d{1,2})\s*(?:点|时)\s*(\d{1,2})\s*分?", RegexOptions.Compiled);
+        static readonly Regex TimeCompactRe = new Regex(@"^\s*(\d{2})(\d{2})(?=\s|[\u4e00-\u9fa5])", RegexOptions.Compiled);
         static readonly Regex FareRe = new Regex(@"([0-9]+(?:\.[0-9]+)?)\s*[¥￥元块]", RegexOptions.Compiled);
+        // 货币符号在前：¥2.00 / ￥ 2
+        static readonly Regex CurrencyFareRe = new Regex(@"[¥￥]\s*([0-9]+(?:\.[0-9]+)?)", RegexOptions.Compiled);
         // 无货币符号的费用（必须带小数点，避免把「14:41」里的 41 当钱）
         static readonly Regex PlainFareRe = new Regex(@"(?<![0-9.])([0-9]+\.[0-9]{1,2})(?![0-9])", RegexOptions.Compiled);
         static readonly Regex FareOnlyRe = new Regex(@"^[¥￥]?\s*([0-9]+(?:\.[0-9]+)?)\s*[¥￥元]?$", RegexOptions.Compiled);
@@ -32,26 +37,35 @@ namespace TripBook
         static readonly Regex Dur2Re = new Regex(@"(\d+)\s*(?:min|分钟|分)", RegexOptions.Compiled);
         static readonly Regex TagRe = new Regex(@"[【\[]\s*([^】\]]+?)\s*[】\]]", RegexOptions.Compiled);
         static readonly Regex PovHeadRe = new Regex(@"^\s*(?:pov|第一视角|车载视角|机位)\s*[:：]?\s*$", RegexOptions.Compiled | RegexOptions.IgnoreCase);
-        static readonly Regex MonthDayRe = new Regex(@"(\d{1,2})\s*[.．/月\-]\s*(\d{1,2})", RegexOptions.Compiled);
+        // 日期：完整（含年）+ 月日
+        static readonly Regex FullDateRe = new Regex(@"(20\d{2})\s*[.\-/年_]\s*(\d{1,2})\s*[.\-/月_]\s*(\d{1,2})\s*日?", RegexOptions.Compiled);
+        static readonly Regex FullDateCompactRe = new Regex(@"(?<![0-9])(20\d{2})(\d{2})(\d{2})(?![0-9])", RegexOptions.Compiled);
+        static readonly Regex MonthDayRe = new Regex(@"(?<![0-9])(\d{1,2})\s*[.．/月\-_]\s*(\d{1,2})\s*日?(?![0-9])", RegexOptions.Compiled);
         static readonly Regex SegSplitRe = new Regex(@"\s*[-—–~～→至]+\s*", RegexOptions.Compiled);
         static readonly Regex LineHintRe = new Regex(@"\d|路|线|快|慢|专|环|区间|观光|BRT|地铁|轨交|城铁|轻轨", RegexOptions.Compiled);
         static readonly Regex RouteVehRe = new Regex(@"^(.*?)[_\-—–]([A-Za-z]{0,2}\d{3,6}[A-Za-z]?)$", RegexOptions.Compiled);
         static readonly Regex SpaceRe = new Regex(@"[ \t]+", RegexOptions.Compiled);
         static readonly Regex RouteTailRe = new Regex(@"[路线程线]", RegexOptions.Compiled);
+        // 车号显式标签：车号:75205 / 车牌 苏B12345 里的数字部分
+        static readonly Regex VehicleLabelRe = new Regex(@"(?:车号|車號|车牌|車牌|车辆|車輛|编号|編號)\s*[:：]?\s*([A-Za-z]{0,2}\d{3,6}[A-Za-z]?)", RegexOptions.Compiled);
+        // 纯分隔线 / 装饰行
+        static readonly Regex RuleLineRe = new Regex(@"^[\s\-=—–_*~·。、,，]+$", RegexOptions.Compiled);
+        static readonly Regex HanRe = new Regex(@"[\u4e00-\u9fa5]", RegexOptions.Compiled);
+        static readonly Regex BareYearRe = new Regex(@"(?<![0-9])(20\d{2})(?![0-9])", RegexOptions.Compiled);
 
-        // 构成一次乘降事件的「物理动作」
+        // 构成一次乘降事件的「物理动作」（同义词归一）
         static readonly (string[] kws, string canon)[] ActionDefs = new[]
         {
-            (new[] { "上车", "上車" }, "上车"),
-            (new[] { "下车", "下車" }, "下车"),
-            (new[] { "进站", "入站", "进闸", "入闸" }, "进站"),
-            (new[] { "出站", "出闸" }, "出站"),
+            (new[] { "上车", "上車", "乘车", "乘車", "搭乘", "登车", "登車" }, "上车"),
+            (new[] { "下车", "下車", "到站", "抵达", "到達", "到达" }, "下车"),
+            (new[] { "进站", "進站", "入站", "进闸", "進閘", "入闸" }, "进站"),
+            (new[] { "出站", "出閘", "出闸" }, "出站"),
         };
 
         // 噪声词：不带物理动作，属于状态/优惠/支付方式说明，解析线路车号时剔除
         static readonly string[] NoiseWords = {
             "行程中", "换乘优惠", "优惠", "折扣", "免费", "待支付", "已支付",
-            "刷卡", "扫码", "扫码支付", "现金", "投币"
+            "刷卡", "扫码", "扫码支付", "现金", "投币", "在途", "已出站", "已进站"
         };
 
         // ------------------------------------------------------------ 工具
@@ -86,6 +100,165 @@ namespace TripBook
 
         static string FmtTime(int hh, int mm) => string.Format("{0:00}:{1:00}", hh, mm);
 
+        /// <summary>把「11点56分」「1156」等写法统一成 11:56，只作用于行首，避免误伤「耗时5小时30分」。</summary>
+        static string NormalizeTimeText(string n)
+        {
+            var mc = TimeCnRe.Match(n);
+            if (mc.Success)
+            {
+                int hh = int.Parse(mc.Groups[1].Value), mm = int.Parse(mc.Groups[2].Value);
+                if (hh <= 24 && mm <= 59)
+                    return FmtTime(hh, mm) + n.Substring(mc.Length);
+            }
+            var m2 = TimeCompactRe.Match(n);
+            if (m2.Success)
+            {
+                int hh = int.Parse(m2.Groups[1].Value), mm = int.Parse(m2.Groups[2].Value);
+                if (hh <= 24 && mm <= 59)
+                    return FmtTime(hh, mm) + " " + n.Substring(m2.Length).TrimStart();
+            }
+            return n;
+        }
+
+        /// <summary>从任意文本（文件名、标题、正文行）里抽出的日期线索</summary>
+        public class DateHint
+        {
+            public int? Year;
+            public int? Month;
+            public int? Day;
+            public bool HasFull { get { return Year.HasValue && Month.HasValue && Day.HasValue; } }
+            public bool HasMonthDay { get { return Month.HasValue && Day.HasValue; } }
+        }
+
+        /// <summary>
+        /// 从文件名 / 文本中解析日期。先找带年份的完整日期（2026-11-01、2026年11月1日、20261101），
+        /// 再退化到「月.日」（11.1行程、2月9日）。会先剥掉路径与扩展名。
+        /// </summary>
+        public static DateHint ParseDateHint(string nameOrText)
+        {
+            var h = new DateHint();
+            if (string.IsNullOrEmpty(nameOrText)) return h;
+
+            string s = nameOrText.Replace('\\', '/').Trim();
+            int slash = s.LastIndexOf('/');
+            if (slash >= 0) s = s.Substring(slash + 1);
+            int dot = s.LastIndexOf('.');
+            if (dot > 0)
+            {
+                var ext = s.Substring(dot + 1);
+                // 仅当后缀看起来像扩展名（纯字母且不超过 5 位）才剥掉，避免把「11.1行程」切成「11」
+                if (ext.Length > 0 && ext.Length <= 5 && ext.All(char.IsLetter))
+                    s = s.Substring(0, dot);
+            }
+            s = Norm(s);
+
+            var f = FullDateRe.Match(s);
+            if (f.Success)
+            {
+                int y = int.Parse(f.Groups[1].Value), m = int.Parse(f.Groups[2].Value), d = int.Parse(f.Groups[3].Value);
+                if (ValidYmd(y, m, d)) { h.Year = y; h.Month = m; h.Day = d; return h; }
+            }
+            var fc = FullDateCompactRe.Match(s);
+            if (fc.Success)
+            {
+                int y = int.Parse(fc.Groups[1].Value), m = int.Parse(fc.Groups[2].Value), d = int.Parse(fc.Groups[3].Value);
+                if (ValidYmd(y, m, d)) { h.Year = y; h.Month = m; h.Day = d; return h; }
+            }
+            var md = MonthDayRe.Match(s);
+            if (md.Success)
+            {
+                int m = int.Parse(md.Groups[1].Value), d = int.Parse(md.Groups[2].Value);
+                if (m >= 1 && m <= 12 && d >= 1 && d <= 31) { h.Month = m; h.Day = d; }
+            }
+            // 文件名只写了年份（如「2024 行程.txt」）也能用来校正正文里只有月日的日期
+            if (!h.Year.HasValue)
+            {
+                var by = BareYearRe.Match(s);
+                if (by.Success) h.Year = int.Parse(by.Groups[1].Value);
+            }
+            return h;
+        }
+
+        /// <summary>只认「带年份的完整日期」，用于识别独立成行的日期，不把「11.1行程」误吃成日期行。</summary>
+        static DateTime? FullDateFromLine(string s)
+        {
+            var f = FullDateRe.Match(s);
+            if (f.Success)
+            {
+                int y = int.Parse(f.Groups[1].Value), m = int.Parse(f.Groups[2].Value), d = int.Parse(f.Groups[3].Value);
+                if (ValidYmd(y, m, d)) return new DateTime(y, m, d);
+            }
+            var fc = FullDateCompactRe.Match(s);
+            if (fc.Success)
+            {
+                int y = int.Parse(fc.Groups[1].Value), m = int.Parse(fc.Groups[2].Value), d = int.Parse(fc.Groups[3].Value);
+                if (ValidYmd(y, m, d)) return new DateTime(y, m, d);
+            }
+            return null;
+        }
+
+        static bool ValidYmd(int y, int m, int d)
+        {
+            if (y < 1900 || y > 2200 || m < 1 || m > 12 || d < 1 || d > 31) return false;
+            try { var _ = new DateTime(y, m, d); return true; }
+            catch { return false; }
+        }
+
+        /// <summary>安全构造日期：非法日（如把 2-29 改到平年）自动收敛到当月最后一天。</summary>
+        static DateTime SafeDate(int y, int m, int d)
+        {
+            if (y < 1900 || y > 2200) y = DateTime.Today.Year;
+            if (m < 1) m = 1;
+            if (m > 12) m = 12;
+            int max = DateTime.DaysInMonth(y, m);
+            if (d < 1) d = 1;
+            if (d > max) d = max;
+            return new DateTime(y, m, d);
+        }
+
+        /// <summary>把日期线索换算成具体日期：无年份时按今天推，超过 45 天视为去年。</summary>
+        public static DateTime? HintToDate(DateHint h, DateTime today)
+        {
+            if (h == null || !h.HasMonthDay) return null;
+            int year = h.Year ?? today.Year;
+            DateTime d;
+            try { d = new DateTime(year, h.Month.Value, h.Day.Value); }
+            catch { return null; }
+            if (!h.Year.HasValue && (d - today).TotalDays > 45)
+            {
+                try { d = new DateTime(year - 1, h.Month.Value, h.Day.Value); } catch { return null; }
+            }
+            return d;
+        }
+
+        /// <summary>从一段文本里直接抽日期（完整日期优先，其次月日；forceYear 可校正月日的年份）。</summary>
+        public static DateTime? ExtractDate(string text, DateTime today, int? forceYear = null)
+        {
+            if (string.IsNullOrEmpty(text)) return null;
+            var s = Norm(text);
+            var f = FullDateRe.Match(s);
+            if (f.Success)
+            {
+                int y = int.Parse(f.Groups[1].Value), m = int.Parse(f.Groups[2].Value), d = int.Parse(f.Groups[3].Value);
+                if (ValidYmd(y, m, d)) return new DateTime(y, m, d);
+            }
+            var fc = FullDateCompactRe.Match(s);
+            if (fc.Success)
+            {
+                int y = int.Parse(fc.Groups[1].Value), m = int.Parse(fc.Groups[2].Value), d = int.Parse(fc.Groups[3].Value);
+                if (ValidYmd(y, m, d)) return new DateTime(y, m, d);
+            }
+            var md = MonthDayRe.Match(s);
+            if (!md.Success) return null;
+            int mo = int.Parse(md.Groups[1].Value), dy = int.Parse(md.Groups[2].Value);
+            if (mo < 1 || mo > 12 || dy < 1 || dy > 31) return null;
+            int year = forceYear ?? today.Year;
+            var r = SafeDate(year, mo, dy);
+            if (!forceYear.HasValue && (r - today).TotalDays > 45)
+                r = SafeDate(year - 1, mo, dy);
+            return r;
+        }
+
         /// <summary>是否像一个「车号」：纯数字（3-6 位）或数字+尾字母，且不少于 3 位数字、整体偏长/带字母。</summary>
         static bool IsVehicleToken(string tok)
         {
@@ -118,11 +291,19 @@ namespace TripBook
             route = "";
             vehicle = "";
 
+            // 显式车号标签：车号:75205 / 车牌 08025D
+            var vl = VehicleLabelRe.Match(remain);
+            if (vl.Success)
+            {
+                vehicle = vl.Groups[1].Value;
+                remain = SpaceRe.Replace(remain.Replace(vl.Value, " ").Trim(), " ").Trim();
+            }
+
             var m = RouteVehRe.Match(remain);
             if (m.Success)
             {
                 route = CleanRoute(m.Groups[1].Value);
-                vehicle = m.Groups[2].Value;
+                if (string.IsNullOrEmpty(vehicle)) vehicle = m.Groups[2].Value;
                 return;
             }
 
@@ -137,7 +318,7 @@ namespace TripBook
             }
             if (vIdx >= 0)
             {
-                vehicle = toks[vIdx];
+                if (string.IsNullOrEmpty(vehicle)) vehicle = toks[vIdx];
                 toks.RemoveAt(vIdx);
             }
             route = CleanRoute(string.Join(" ", toks));
@@ -152,20 +333,31 @@ namespace TripBook
         public static List<ItineraryEntry> ParseEntryLine(string line)
         {
             var res = new List<ItineraryEntry>();
-            var n = Norm(line);
+            var n = NormalizeTimeText(Norm(line));
             if (n == "") return res;
 
             // —— 费用（先抽出来，避免干扰后续切分）——
+            // 「¥2.00」这种符号在前的写法最明确，优先取；否则它会让后面的「数字¥」正则
+            // 跨过空格把车号 10001 和这个 ¥ 连起来误判成费用。
             var fares = new List<decimal?>();
-            foreach (Match fm in FareRe.Matches(n))
+            foreach (Match fm in CurrencyFareRe.Matches(n))
                 fares.Add(ToDecimal(fm.Groups[1].Value));
             if (fares.Count == 0)
             {
-                var pm = PlainFareRe.Match(n);
-                if (pm.Success) fares.Add(ToDecimal(pm.Groups[1].Value));
+                foreach (Match fm in FareRe.Matches(n))
+                    fares.Add(ToDecimal(fm.Groups[1].Value));
+                if (fares.Count == 0)
+                {
+                    var pm = PlainFareRe.Match(n);
+                    if (pm.Success) fares.Add(ToDecimal(pm.Groups[1].Value));
+                }
             }
-            var work = FareRe.Replace(n, " ");
+            // 清理顺序同样重要：先抹掉「¥数字」，再抹「数字¥」
+            var work = CurrencyFareRe.Replace(n, " ");
+            work = FareRe.Replace(work, " ");
             work = PlainFareRe.Replace(work, " ");
+            work = work.Replace("¥", " ").Replace("￥", " ").Replace("元", " ").Replace("块", " ");
+            work = SpaceRe.Replace(work, " ").Trim();
 
             // —— 时间（可多个）——
             var times = new List<(int idx, int len, int hh, int mm)>();
@@ -177,18 +369,28 @@ namespace TripBook
             if (times.Count == 0) return res;
 
             // —— 动作词 ——
-            var actions = new List<(int idx, int end, string canon)>();
+            // 保留原文关键词 kw，切分时按它定位（同义词/繁体归一后长度可能不同）
+            var actions = new List<(int idx, int end, string canon, string kw)>();
             foreach (var def in ActionDefs)
                 foreach (var kw in def.kws)
                 {
                     int i = work.IndexOf(kw, StringComparison.Ordinal);
                     while (i >= 0)
                     {
-                        actions.Add((i, i + kw.Length, def.canon));
+                        actions.Add((i, i + kw.Length, def.canon, kw));
                         i = work.IndexOf(kw, i + kw.Length, StringComparison.Ordinal);
                     }
                 }
             actions = actions.OrderBy(a => a.idx).ToList();
+            // 同义动作词挨在一起时（如「乘车上车」）只算一次事件
+            var dedup = new List<(int idx, int end, string canon, string kw)>();
+            foreach (var a in actions)
+            {
+                var last = dedup.Count > 0 ? dedup[dedup.Count - 1] : (idx: -99, end: -99, canon: "", kw: "");
+                if (last.canon == a.canon && a.idx - last.idx < 4) continue;
+                dedup.Add(a);
+            }
+            actions = dedup;
 
             // —— 没有物理动作：可能是「时间标记」行（如 刷新换乘优惠）——
             if (actions.Count == 0)
@@ -235,11 +437,23 @@ namespace TripBook
                 if (right < left) right = work.Length;
 
                 string span = work.Substring(left, right - left);
-                int rel = span.IndexOf(act.canon, StringComparison.Ordinal);
+                int rel = span.IndexOf(act.kw, StringComparison.Ordinal);
                 if (rel < 0) rel = 0;
                 string station = span.Substring(0, rel)
                     .Trim(' ', ',', '，', '、', '·', '|', '_', '-', '—', '–', '：', ':');
-                string restAfter = span.Substring(rel + act.canon.Length).Trim();
+                string restAfter = span.Substring(Math.Min(rel + act.kw.Length, span.Length)).Trim();
+
+                // 动作写在站点前面（「11:56 上车 八佰伴 703 85060」）：从后续 token 里补回站点
+                if (station == "")
+                {
+                    var tks = restAfter.Split(new[] { ' ' }, StringSplitOptions.RemoveEmptyEntries).ToList();
+                    if (tks.Count >= 2 && HanRe.IsMatch(tks[0]) &&
+                        !LooksLikeLine(tks[0]) && !IsVehicleToken(tks[0]))
+                    {
+                        station = tks[0].Trim(' ', ',', '，', '、', '·', '|');
+                        restAfter = string.Join(" ", tks.Skip(1));
+                    }
+                }
 
                 // 时间：取本动作之前、最近的一个时间
                 var t = times.Where(x => x.idx <= act.idx).OrderByDescending(x => x.idx).First();
@@ -340,28 +554,24 @@ namespace TripBook
 
         // ------------------------------------------------------------ 标题 / 日期
 
-        public static DateTime? TitleToDate(string title, DateTime today)
+        /// <summary>兼容旧签名；forceYear 可由文件名提供，用于校正只有「月.日」的正文标题年份。</summary>
+        public static DateTime? TitleToDate(string title, DateTime today, int? forceYear = null)
         {
-            if (string.IsNullOrEmpty(title)) return null;
-            var m = MonthDayRe.Match(title);
-            if (!m.Success) return null;
-            int mo = int.Parse(m.Groups[1].Value), dy = int.Parse(m.Groups[2].Value);
-            if (mo < 1 || mo > 12 || dy < 1 || dy > 31) return null;
-            try
-            {
-                var d = new DateTime(today.Year, mo, dy);
-                if ((d - today).TotalDays > 45)
-                    d = new DateTime(today.Year - 1, mo, dy);
-                return d;
-            }
-            catch { return null; }
+            return ExtractDate(title, today, forceYear);
         }
 
         // ------------------------------------------------------------ 主入口
 
-        public static Journey Parse(string text, DateTime? defaultDate = null)
+        /// <summary>
+        /// fileName 为导入时的文件名（可含路径）。日期判断优先级：
+        /// 正文完整日期行 &gt; 文件名完整日期（带年）&gt; 正文标题/前几行的月日（年份用文件名年份校正）&gt; 文件名月日 &gt; 今天。
+        /// </summary>
+        public static Journey Parse(string text, DateTime? defaultDate = null, string fileName = null)
         {
             var today = defaultDate ?? DateTime.Today;
+            var hint = ParseDateHint(fileName);
+            int? forceYear = hint.Year;
+            var hintDate = HintToDate(hint, today);
             var journey = new Journey
             {
                 id = Guid.NewGuid().ToString("N").Substring(0, 12),
@@ -377,11 +587,12 @@ namespace TripBook
             var notes = journey.notes;
             string title = "";
             bool inPov = false;
+            DateTime? explicitDate = null;
 
             foreach (var rawLine in lines)
             {
                 var line = Norm(rawLine);
-                if (line == "") continue;
+                if (line == "" || RuleLineRe.IsMatch(line)) continue;
 
                 if (PovHeadRe.IsMatch(line)) { inPov = true; continue; }
 
@@ -414,6 +625,14 @@ namespace TripBook
                     if (fm.Success) journey.summary.fare = ToDecimal(fm.Groups[1].Value);
                     journey.summary.raw = line;
                     continue;
+                }
+
+                // 独立成行的完整日期：2026年11月1日 / 2026-11-01 / 日期:20261101
+                // 必须在「折行补回」之前判断，否则纯数字日期会被误当成票价补到上一条
+                if (!inPov && !TimeAnyRe.IsMatch(line))
+                {
+                    var fd = FullDateFromLine(line);
+                    if (fd.HasValue) { explicitDate = fd.Value; continue; }
                 }
 
                 var ent = ParseEntryLine(line);
@@ -468,15 +687,31 @@ namespace TripBook
                 prevAbs = m;
             }
 
-            DateTime? d = TitleToDate(title, today);
-            if (d == null)
+            // 日期判断：
+            //  1) 正文里独立成行的完整日期（含年）最可信
+            //  2) 否则取正文标题/前几行的「月.日」，年份优先用文件名给出的年份校正
+            //  3) 正文完全没有日期时，用文件名里的日期（完整或月日）
+            //  4) 都没有才回落到今天
+            // 只取「月.日」线索（不构造 DateTime，避免 2-29 在基准年不是闰年时丢信息）
+            DateHint bodyHint = ParseDateHint(title);
+            if (!bodyHint.HasMonthDay)
             {
                 foreach (var ln in lines.Take(3))
                 {
-                    d = TitleToDate(ln, today);
-                    if (d != null) break;
+                    var bh = ParseDateHint(ln);
+                    if (bh.HasMonthDay) { bodyHint = bh; break; }
                 }
             }
+
+            DateTime? d = explicitDate;
+            if (d == null && (bodyHint.HasMonthDay || hint.HasMonthDay))
+            {
+                int year = forceYear ?? (hintDate.HasValue ? hintDate.Value.Year : today.Year);
+                int mo = bodyHint.HasMonthDay ? bodyHint.Month.Value : hint.Month.Value;
+                int dy = bodyHint.HasMonthDay ? bodyHint.Day.Value : hint.Day.Value;
+                d = SafeDate(year, mo, dy);
+            }
+            if (d == null) d = hintDate;
             var finalDate = d ?? today;
 
             journey.title = title != "" ? title : (finalDate.Month + "." + finalDate.Day + " 行程");

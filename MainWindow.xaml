@@ -140,7 +140,7 @@
         <!-- ================= 侧边栏 ================= -->
         <Border Grid.Column="0" Background="{StaticResource SidebarBrush}"
                 BorderBrush="{StaticResource BorderBrush2}" BorderThickness="0,0,1,0">
-            <Grid Margin="14,18,14,14">
+            <Grid Margin="14,14,14,12">
                 <Grid.RowDefinitions>
                     <RowDefinition Height="Auto"/>
                     <RowDefinition Height="Auto"/>
@@ -167,7 +167,7 @@
                 </StackPanel>
 
                 <!-- 搜索 -->
-                <Grid Grid.Row="1" Margin="0,14,0,10">
+                <Grid Grid.Row="1" Margin="0,10,0,8">
                     <TextBox x:Name="SearchBox" Style="{StaticResource Input}"
                              TextChanged="SearchBox_TextChanged"/>
                     <TextBlock x:Name="SearchHint" Text="搜索站点 / 线路 / 日期"
@@ -177,6 +177,9 @@
 
                 <!-- 行程列表 -->
                 <ListBox Grid.Row="2" x:Name="JourneyList" Style="{StaticResource JourneyList}"
+                         SelectionMode="Extended"
+                         PreviewMouseDown="JourneyList_PreviewMouseDown"
+                         PreviewKeyDown="JourneyList_PreviewKeyDown"
                          SelectionChanged="JourneyList_SelectionChanged">
                     <ListBox.ItemTemplate>
                         <DataTemplate>
@@ -209,22 +212,27 @@
 
                 <!-- 底部 -->
                 <StackPanel Grid.Row="3">
-                    <Grid Margin="0,0,0,8">
+                    <Grid Margin="0,0,0,6">
                         <Grid.ColumnDefinitions>
                             <ColumnDefinition Width="*"/>
-                            <ColumnDefinition Width="8"/>
+                            <ColumnDefinition Width="6"/>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="6"/>
                             <ColumnDefinition Width="*"/>
                         </Grid.ColumnDefinitions>
                         <Button Grid.Column="0" Content="概览" Style="{StaticResource BtnGhost}"
                                 Click="Overview_Click"/>
-                        <Button Grid.Column="2" Content="导入TXT" Style="{StaticResource BtnGhost}"
-                                Click="Import_Click"/>
+                        <Button Grid.Column="2" Content="导入" ToolTip="批量导入 TXT 行程文本"
+                                Style="{StaticResource BtnGhost}" Click="Import_Click"/>
+                        <Button x:Name="BatchButton" Grid.Column="4" Content="批量"
+                                ToolTip="批量删除 / 批量修改行程年份" Style="{StaticResource BtnGhost}"
+                                Click="Batch_Click"/>
                     </Grid>
                     <TextBlock x:Name="CountLabel" Text="暂无数据" Style="{StaticResource Dim}"
-                               Margin="2,0,0,8"/>
+                               Margin="2,0,0,6"/>
                     <Button x:Name="NewButton" Content="＋  新建行程" Style="{StaticResource BtnPrimary}"
-                            Height="36" Click="New_Click"/>
-                    <Grid Margin="0,8,0,0">
+                            Height="34" Click="New_Click"/>
+                    <Grid Margin="0,6,0,0">
                         <Grid.ColumnDefinitions>
                             <ColumnDefinition Width="*"/>
                             <ColumnDefinition Width="Auto"/>
@@ -345,9 +353,33 @@
                     <ItemsControl ItemsSource="{Binding Entries}"
                                   ItemTemplateSelector="{StaticResource TimelineSelector}"/>
 
-                    <!-- POV -->
-                    <StackPanel Visibility="{Binding HasPov, Converter={StaticResource BoolVis}}">
-                        <TextBlock Text="POV 片段" Style="{StaticResource SectionTitle}" Margin="2,22,0,10"/>
+                    <!-- POV 总结（单条行程） -->
+                    <StackPanel>
+                        <TextBlock Text="POV 总结" Style="{StaticResource SectionTitle}" Margin="2,22,0,4"/>
+                        <TextBlock Text="{Binding PovSubtitle}" Style="{StaticResource Dim}" Margin="2,0,0,10"/>
+                        <UniformGrid Rows="1" Columns="4" Margin="0,0,0,12"
+                                     Visibility="{Binding HasPov, Converter={StaticResource BoolVis}}">
+                            <StackPanel>
+                                <TextBlock Text="{Binding PovSegmentCount}" FontFamily="Consolas" FontSize="19"
+                                           FontWeight="Bold" Foreground="#A98BFF"/>
+                                <TextBlock Text="POV 片段" FontSize="11" Foreground="#66707F" Margin="0,2,0,0"/>
+                            </StackPanel>
+                            <StackPanel>
+                                <TextBlock Text="{Binding PovLineCount}" FontFamily="Consolas" FontSize="19"
+                                           FontWeight="Bold" Foreground="#4C8DFF"/>
+                                <TextBlock Text="涉及线路" FontSize="11" Foreground="#66707F" Margin="0,2,0,0"/>
+                            </StackPanel>
+                            <StackPanel>
+                                <TextBlock Text="{Binding PovVehicleCount}" FontFamily="Consolas" FontSize="19"
+                                           FontWeight="Bold" Foreground="#36C9A0"/>
+                                <TextBlock Text="涉及车号" FontSize="11" Foreground="#66707F" Margin="0,2,0,0"/>
+                            </StackPanel>
+                            <StackPanel>
+                                <TextBlock Text="{Binding PovTagCount}" FontFamily="Consolas" FontSize="19"
+                                           FontWeight="Bold" Foreground="#F0B35B"/>
+                                <TextBlock Text="机位标签" FontSize="11" Foreground="#66707F" Margin="0,2,0,0"/>
+                            </StackPanel>
+                        </UniformGrid>
                         <ItemsControl ItemsSource="{Binding Pov}">
                             <ItemsControl.ItemTemplate>
                                 <DataTemplate>
@@ -378,6 +410,8 @@
                                 </DataTemplate>
                             </ItemsControl.ItemTemplate>
                         </ItemsControl>
+                        <TextBlock Text="还没有 POV 片段记录" FontSize="12" Foreground="#66707F" Margin="0,2,0,0"
+                                   Visibility="{Binding HasPov, Converter={StaticResource BoolVis}, ConverterParameter=invert}"/>
                     </StackPanel>
 
                     <!-- 备注 -->
@@ -460,6 +494,73 @@
                             </ItemsControl>
                             <TextBlock Text="还没有任何记录" FontSize="12" Foreground="#66707F"
                                        Visibility="{Binding HasBars, Converter={StaticResource BoolVis}, ConverterParameter=invert}"/>
+                        </StackPanel>
+                    </Border>
+
+                    <!-- POV 总结 -->
+                    <TextBlock Text="POV 总结" Style="{StaticResource SectionTitle}" Margin="2,22,0,4"/>
+                    <TextBlock Text="{Binding Pov.Subtitle}" Style="{StaticResource Dim}" Margin="2,0,0,10"/>
+                    <Border Style="{StaticResource Card}" Padding="16,14">
+                        <StackPanel>
+                            <UniformGrid Rows="1" Columns="4" Margin="0,0,0,14"
+                                         Visibility="{Binding Pov.HasRows, Converter={StaticResource BoolVis}}">
+                                <StackPanel>
+                                    <TextBlock Text="{Binding Pov.SegmentCount}" FontFamily="Consolas" FontSize="19"
+                                               FontWeight="Bold" Foreground="#A98BFF"/>
+                                    <TextBlock Text="POV 片段" FontSize="11" Foreground="#66707F" Margin="0,2,0,0"/>
+                                </StackPanel>
+                                <StackPanel>
+                                    <TextBlock Text="{Binding Pov.JourneyCount}" FontFamily="Consolas" FontSize="19"
+                                               FontWeight="Bold" Foreground="#4C8DFF"/>
+                                    <TextBlock Text="覆盖行程" FontSize="11" Foreground="#66707F" Margin="0,2,0,0"/>
+                                </StackPanel>
+                                <StackPanel>
+                                    <TextBlock Text="{Binding Pov.LineCount}" FontFamily="Consolas" FontSize="19"
+                                               FontWeight="Bold" Foreground="#36C9A0"/>
+                                    <TextBlock Text="涉及线路" FontSize="11" Foreground="#66707F" Margin="0,2,0,0"/>
+                                </StackPanel>
+                                <StackPanel>
+                                    <TextBlock Text="{Binding Pov.VehicleCount}" FontFamily="Consolas" FontSize="19"
+                                               FontWeight="Bold" Foreground="#F0B35B"/>
+                                    <TextBlock Text="涉及车号" FontSize="11" Foreground="#66707F" Margin="0,2,0,0"/>
+                                </StackPanel>
+                            </UniformGrid>
+
+                            <ItemsControl ItemsSource="{Binding Pov.Rows}">
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate>
+                                        <Border Background="#151A22" BorderBrush="#222B38" BorderThickness="1"
+                                                CornerRadius="9" Padding="12,9" Margin="0,0,0,7">
+                                            <WrapPanel>
+                                                <TextBlock Text="{Binding Date}" FontFamily="Consolas" FontSize="11"
+                                                           Foreground="#66707F" VerticalAlignment="Center" Margin="0,0,8,0"/>
+                                                <TextBlock Text="{Binding JourneyTitle}" FontSize="12" FontWeight="SemiBold"
+                                                           Foreground="#9AA5B8" VerticalAlignment="Center" Margin="0,0,10,0"
+                                                           MaxWidth="150" TextTrimming="CharacterEllipsis"/>
+                                                <Border CornerRadius="6" Padding="8,2" Margin="0,0,8,0"
+                                                        Background="#264C8DFF" BorderBrush="#554C8DFF" BorderThickness="1">
+                                                    <TextBlock Text="{Binding Line}" Foreground="{Binding LineFg}"
+                                                               FontSize="11" FontWeight="Bold" VerticalAlignment="Center"/>
+                                                </Border>
+                                                <TextBlock Text="{Binding Segment}" FontSize="12" Foreground="#9AA5B8"
+                                                           VerticalAlignment="Center" Margin="0,0,8,0"
+                                                           Visibility="{Binding HasSegment, Converter={StaticResource BoolVis}}"/>
+                                                <TextBlock Text="{Binding Vehicle}" FontFamily="Consolas" FontSize="11"
+                                                           Foreground="#66707F" VerticalAlignment="Center" Margin="0,0,8,0"
+                                                           Visibility="{Binding HasVehicle, Converter={StaticResource BoolVis}}"/>
+                                                <Border CornerRadius="6" Padding="7,1" Margin="0,0,4,0"
+                                                        Background="#26A98BFF" BorderBrush="#55A98BFF" BorderThickness="1"
+                                                        Visibility="{Binding HasTag, Converter={StaticResource BoolVis}}">
+                                                    <TextBlock Text="{Binding Tag}" Foreground="#A98BFF"
+                                                               FontSize="10" FontWeight="Bold"/>
+                                                </Border>
+                                            </WrapPanel>
+                                        </Border>
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+                            <TextBlock Text="还没有 POV 片段记录" FontSize="12" Foreground="#66707F"
+                                       Visibility="{Binding Pov.HasRows, Converter={StaticResource BoolVis}, ConverterParameter=invert}"/>
                         </StackPanel>
                     </Border>
                 </StackPanel>

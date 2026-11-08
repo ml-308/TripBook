@@ -16,6 +16,7 @@ data/
 _shot*.png
 _verify*.png
 _fix*.png
+_v*.png
 docs_screenshot.png
 *.tmp
 

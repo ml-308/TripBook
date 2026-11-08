@@ -45,7 +45,7 @@
 #endif
 
 #ifndef AppVersion
-  #define AppVersion "1.1.1"
+  #define AppVersion "1.2.0"
 #endif
 #ifndef AppPublisher
   #define AppPublisher "ml-308"

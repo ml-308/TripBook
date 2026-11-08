@@ -152,6 +152,11 @@ namespace TripBook
         public List<EntryVm> Entries { get; set; } = new List<EntryVm>();
         public List<PovVm> Pov { get; set; } = new List<PovVm>();
         public List<string> Notes { get; set; } = new List<string>();
+        public int PovSegmentCount { get; set; }
+        public int PovLineCount { get; set; }
+        public int PovVehicleCount { get; set; }
+        public int PovTagCount { get; set; }
+        public string PovSubtitle { get; set; } = "";
 
         public bool HasChain { get { return Chain.Count > 0; } }
         public bool HasPov { get { return Pov.Count > 0; } }
@@ -244,7 +249,10 @@ namespace TripBook
             for (int i = 0; i < ordered.Count; i++)
                 vm.Entries.Add(EntryVm.Build(ordered[i], i == 0, i == ordered.Count - 1));
 
+            var povLines = new HashSet<string>();
+            var povVehicles = new HashSet<string>();
             foreach (var p in j.pov)
+            {
                 vm.Pov.Add(new PovVm
                 {
                     Tag = p.tag,
@@ -253,6 +261,16 @@ namespace TripBook
                     Vehicle = p.vehicle,
                     Segment = p.Segment
                 });
+                if (!string.IsNullOrWhiteSpace(p.line)) povLines.Add(p.line.Trim());
+                if (!string.IsNullOrWhiteSpace(p.vehicle)) povVehicles.Add(p.vehicle.Trim());
+                if (!string.IsNullOrWhiteSpace(p.tag)) vm.PovTagCount++;
+            }
+            vm.PovSegmentCount = vm.Pov.Count;
+            vm.PovLineCount = povLines.Count;
+            vm.PovVehicleCount = povVehicles.Count;
+            vm.PovSubtitle = vm.Pov.Count > 0
+                ? vm.Pov.Count + " 个片段 · " + povLines.Count + " 条线路 · " + povVehicles.Count + " 个车号"
+                : "在行程文本里写上 POV 段落，这里会自动汇总";
 
             vm.Notes = j.notes;
             return vm;
@@ -269,6 +287,65 @@ namespace TripBook
         public string CountText { get { return Count + " 条"; } }
     }
 
+    /// <summary>总览页 POV 总结里的一行</summary>
+    public class PovRowVm
+    {
+        public string Date { get; set; } = "";
+        public string JourneyTitle { get; set; } = "";
+        public string Line { get; set; } = "";
+        public Brush LineFg { get; set; }
+        public string Segment { get; set; } = "";
+        public bool HasSegment { get { return !string.IsNullOrEmpty(Segment); } }
+        public string Vehicle { get; set; } = "";
+        public bool HasVehicle { get { return !string.IsNullOrEmpty(Vehicle); } }
+        public string Tag { get; set; } = "";
+        public bool HasTag { get { return !string.IsNullOrEmpty(Tag); } }
+    }
+
+    /// <summary>跨行程的 POV 总结（数据聚合在 Models.PovSummary，这里只补显示属性）</summary>
+    public class PovSummaryVm
+    {
+        public int SegmentCount { get; set; }
+        public int LineCount { get; set; }
+        public int VehicleCount { get; set; }
+        public int JourneyCount { get; set; }
+        public List<PovRowVm> Rows { get; set; } = new List<PovRowVm>();
+        public bool HasRows { get { return Rows.Count > 0; } }
+        public string Subtitle
+        {
+            get
+            {
+                return HasRows
+                    ? "覆盖 " + JourneyCount + " 条行程 · " + LineCount + " 条线路 · " + VehicleCount + " 个车号"
+                    : "在文本里写上 POV 段落即可自动汇总";
+            }
+        }
+
+        public static PovSummaryVm Build(List<Journey> all)
+        {
+            var s = PovSummary.Build(all);
+            var vm = new PovSummaryVm
+            {
+                SegmentCount = s.SegmentCount,
+                LineCount = s.LineCount,
+                VehicleCount = s.VehicleCount,
+                JourneyCount = s.JourneyCount
+            };
+            foreach (var r in s.Rows)
+                vm.Rows.Add(new PovRowVm
+                {
+                    Date = r.Date,
+                    JourneyTitle = r.JourneyTitle,
+                    Line = r.Line,
+                    LineFg = Palette.Brush(Palette.LineColorString(r.Line)),
+                    Segment = r.Segment,
+                    Vehicle = r.Vehicle,
+                    Tag = r.Tag
+                });
+            return vm;
+        }
+    }
+
     public class DashboardVm
     {
         public int JourneyCount { get; set; }
@@ -278,11 +355,14 @@ namespace TripBook
         public string DateRange { get { return FirstDate + "  ~  " + LastDate; } }
         public List<DashBarVm> Bars { get; set; } = new List<DashBarVm>();
         public bool HasBars { get { return Bars.Count > 0; } }
+        public PovSummaryVm Pov { get; set; } = new PovSummaryVm();
+        public bool HasPov { get { return Pov.HasRows; } }
 
         public static DashboardVm Build(List<Journey> all)
         {
             var vm = new DashboardVm();
             vm.JourneyCount = all.Count;
+            vm.Pov = PovSummaryVm.Build(all);
             vm.RecordCount = all.Sum(j => j.entries.Count(e => !e.marker));
 
             var byDate = new Dictionary<string, int>();
