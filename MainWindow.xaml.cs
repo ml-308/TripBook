@@ -532,7 +532,7 @@ namespace TripBook
         void About()
         {
             Dialogs.Info(this, "关于",
-                "行程簿 TripBook 1.2.0\n\n本地行程记录工具\n" +
+                "行程簿 TripBook 1.3.0\n\n本地行程记录工具\n" +
                 "· 数据保存在：" + _store.DataDir + "\n" +
                 "· 智能解析、时间轴、总览日期分布与 POV 总结、网页导出\n" +
                 "· 支持批量导入 .txt（按文件名识别日期）、批量删除 / 批量改年份\n\n" +

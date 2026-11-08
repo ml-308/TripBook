@@ -1,11 +1,11 @@
 ﻿; 行程簿 TripBook · 安装程序（Inno Setup 6）
 ; 页面结构与选项由 common.iss 统一提供；这里只声明应用身份与要安装的文件。
-; 构建：installer\build-setup.cmd   产物：dist\TripBook-Setup-1.2.0.exe
+; 构建：installer\build-setup.cmd   产物：dist\TripBook-Setup-1.3.0.exe
 
 #define AppName "行程簿"
 #define AppSlug "TripBook"
 #define DirName "TripBook"
-#define AppVersion "1.2.0"
+#define AppVersion "1.3.0"
 #define AppId "{{4B9D2E36-7CA5-4A4B-BF23-5DA08C6B9E47}"
 #define AppExe "TripBook.exe"
 #define AppRepo "TripBook"
