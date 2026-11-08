@@ -24,6 +24,20 @@ class Program
             Console.WriteLine("  POV [" + p.tag + "] " + p.line + " | " + p.from + " -> " + p.to + " | " + p.vehicle);
     }
 
+    // 真实记录样式：带计数的 POV 标题、列表序号、车牌折行、起讫折行、片段时长
+    const string NewPovText =
+@"POV（共 4 个）：
+【4K】 313 官渡里立交桥-苏州公交金山路保养场 
+苏E02574D
+611 木渎公交换乘枢纽-横泾旧木市场
+苏E02070D
+【4K】612 横泾旧木市场-枫津路 苏E03569D
+1 公交一路新村-苏州站北广场公交枢纽     苏E05160D                  和【POV】共计 2 个
+1.昆山 101路 4-10740
+  昆山南站->轨道交通光明路站 70min
+2【4K广角】 上海 陆安线（高速） S2R-0066
+  安亭汽车站->中山北路中潭路 61min";
+
     static void Main()
     {
         Console.OutputEncoding = System.Text.Encoding.UTF8;
@@ -160,7 +174,51 @@ class Program
         var psEmpty = PovSummary.Build(new List<Journey> { je1 });
         Check(!psEmpty.HasRows && psEmpty.SegmentCount == 0, "无 POV 时聚合为空");
 
-        // 10. 导出 HTML
+        // 10. POV 记录格式（带计数标题、序号、车牌折行、起讫折行、时长）
+        Console.WriteLine("== POV 记录格式 ==");
+        var jp = ItineraryParser.Parse(NewPovText);
+        Dump(jp);
+        Check(jp.entries.Count == 0 && jp.notes.Count == 0, "整段都是 POV，不进时间轴/备注");
+        Check(jp.pov.Count == 6, "6 条 POV（4 + 2 两段）");
+
+        var p0 = jp.pov[0];
+        Check(p0.tag == "4K" && p0.line == "313" && p0.from == "官渡里立交桥" &&
+              p0.to == "苏州公交金山路保养场" && p0.vehicle == "苏E02574D",
+              "带标签 + 车牌折行：313 官渡里立交桥→苏州公交金山路保养场 苏E02574D");
+        var p1 = jp.pov[1];
+        Check(p1.tag == "" && p1.line == "611" && p1.from == "木渎公交换乘枢纽" &&
+              p1.to == "横泾旧木市场" && p1.vehicle == "苏E02070D",
+              "无标签 + 车牌折行：611 木渎公交换乘枢纽→横泾旧木市场 苏E02070D");
+        var p2 = jp.pov[2];
+        Check(p2.tag == "4K" && p2.line == "612" && p2.from == "横泾旧木市场" &&
+              p2.to == "枫津路" && p2.vehicle == "苏E03569D",
+              "标签紧贴线路 + 同行车牌：612 横泾旧木市场→枫津路 苏E03569D");
+        var p3 = jp.pov[3];
+        Check(p3.line == "1" && p3.from == "公交一路新村" && p3.to == "苏州站北广场公交枢纽" &&
+              p3.vehicle == "苏E05160D", "线路号就是 1，后面的「和【POV】共计 2 个」另起一段");
+        var p4 = jp.pov[4];
+        Check(p4.line == "昆山 101路" && p4.vehicle == "4-10740" &&
+              p4.from == "昆山南站" && p4.to == "轨道交通光明路站" && p4.dur_min == 70,
+              "序号 + 城市 + 车队编号 + 起讫折行 + 时长 70min");
+        var p5 = jp.pov[5];
+        Check(p5.tag == "4K广角" && p5.line == "上海 陆安线(高速)" && p5.vehicle == "S2R-0066" &&
+              p5.from == "安亭汽车站" && p5.to == "中山北路中潭路" && p5.dur_min == 61,
+              "序号紧贴标签 + 资产码 S2R-0066 + 时长 61min");
+        Check(p4.DurText == "1h10min" && p5.DurText == "1h01min", "时长展示格式化");
+
+        var psp = PovSummary.Build(new List<Journey> { jp });
+        Check(psp.SegmentCount == 6 && psp.LineCount == 6 && psp.VehicleCount == 6, "新格式参与 POV 总结聚合");
+        Check(psp.Rows.Count(r => r.Dur != "") == 2, "POV 总结带时长（2 段有时长）");
+
+        var htmlP = HtmlExporter.Build(jp);
+        Check(htmlP.Contains("1h10min") && htmlP.Contains("苏E02574D"), "HTML 导出含车牌与时长");
+
+        // 11. 正文里的 POV 字样不能把后面的时间轴吞掉
+        var jh = ItineraryParser.Parse("11.2 行程\n09:00 甲上车 1路 10001 2.00¥\n拍了段POV\n10:00 乙上车 2路 20002 1.00¥");
+        Check(jh.entries.Count == 2 && jh.pov.Count == 0 && jh.notes.Count == 1,
+              "「拍了段POV」只进备注，不开启 POV 段");
+
+        // 12. 导出 HTML
         var html = HtmlExporter.Build(j);
         Check(html.Contains("11.1行程") && html.Contains("线路接力") && html.Contains("</html>"), "HTML 导出");
         System.IO.File.WriteAllText("sample_report.html", html);

@@ -88,6 +88,7 @@ namespace TripBook
                                  (string.IsNullOrEmpty(p.tag) ? "" : "<span class=\"tag\">" + E(p.tag) + "</span>") +
                                  "<b style=\"color:" + Palette.LineColorString(p.line) + "\">" + E(p.line) + "</b>" +
                                  (string.IsNullOrEmpty(p.vehicle) ? "" : "<span class=\"mono dim\"> " + E(p.vehicle) + "</span>") +
+                                 (p.HasDur ? "<span class=\"mono dim\"> " + E(p.DurText) + "</span>" : "") +
                                  "</div>" +
                                  (p.HasSegment ? "<div class=\"pov-seg\">" + E(p.Segment) + "</div>" : "") +
                                  "</li>");

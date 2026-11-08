@@ -400,6 +400,10 @@
                                                            FontSize="12" Foreground="#66707F"
                                                            Margin="8,0,0,0" VerticalAlignment="Center"
                                                            Visibility="{Binding HasVehicle, Converter={StaticResource BoolVis}}"/>
+                                                <TextBlock Text="{Binding Dur}" FontFamily="Consolas"
+                                                           FontSize="11" Foreground="#8A93A5"
+                                                           Margin="8,0,0,0" VerticalAlignment="Center"
+                                                           Visibility="{Binding HasDur, Converter={StaticResource BoolVis}}"/>
                                             </WrapPanel>
                                             <TextBlock Text="{Binding Segment}" FontSize="12"
                                                        Foreground="#9AA5B8" Margin="0,5,0,0"
@@ -548,6 +552,9 @@
                                                 <TextBlock Text="{Binding Vehicle}" FontFamily="Consolas" FontSize="11"
                                                            Foreground="#66707F" VerticalAlignment="Center" Margin="0,0,8,0"
                                                            Visibility="{Binding HasVehicle, Converter={StaticResource BoolVis}}"/>
+                                                <TextBlock Text="{Binding Dur}" FontFamily="Consolas" FontSize="11"
+                                                           Foreground="#8A93A5" VerticalAlignment="Center" Margin="0,0,8,0"
+                                                           Visibility="{Binding HasDur, Converter={StaticResource BoolVis}}"/>
                                                 <Border CornerRadius="6" Padding="7,1" Margin="0,0,4,0"
                                                         Background="#26A98BFF" BorderBrush="#55A98BFF" BorderThickness="1"
                                                         Visibility="{Binding HasTag, Converter={StaticResource BoolVis}}">

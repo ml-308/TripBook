@@ -139,6 +139,8 @@ namespace TripBook
         public bool HasVehicle { get { return !string.IsNullOrEmpty(Vehicle); } }
         public string Segment { get; set; } = "";
         public bool HasSegment { get { return !string.IsNullOrEmpty(Segment); } }
+        public string Dur { get; set; } = "";
+        public bool HasDur { get { return !string.IsNullOrEmpty(Dur); } }
     }
 
     public class JourneyVm
@@ -259,7 +261,8 @@ namespace TripBook
                     Line = p.line,
                     LineFg = Palette.Brush(Palette.LineColorString(p.line)),
                     Vehicle = p.vehicle,
-                    Segment = p.Segment
+                    Segment = p.Segment,
+                    Dur = p.DurText
                 });
                 if (!string.IsNullOrWhiteSpace(p.line)) povLines.Add(p.line.Trim());
                 if (!string.IsNullOrWhiteSpace(p.vehicle)) povVehicles.Add(p.vehicle.Trim());
@@ -300,6 +303,8 @@ namespace TripBook
         public bool HasVehicle { get { return !string.IsNullOrEmpty(Vehicle); } }
         public string Tag { get; set; } = "";
         public bool HasTag { get { return !string.IsNullOrEmpty(Tag); } }
+        public string Dur { get; set; } = "";
+        public bool HasDur { get { return !string.IsNullOrEmpty(Dur); } }
     }
 
     /// <summary>跨行程的 POV 总结（数据聚合在 Models.PovSummary，这里只补显示属性）</summary>
@@ -340,7 +345,8 @@ namespace TripBook
                     LineFg = Palette.Brush(Palette.LineColorString(r.Line)),
                     Segment = r.Segment,
                     Vehicle = r.Vehicle,
-                    Tag = r.Tag
+                    Tag = r.Tag,
+                    Dur = r.Dur
                 });
             return vm;
         }

@@ -36,12 +36,20 @@ namespace TripBook
         static readonly Regex DurRe = new Regex(@"(\d+)\s*(?:h|H|小时|时)\s*(\d+)?\s*(?:min|MIN|分钟|分)?", RegexOptions.Compiled);
         static readonly Regex Dur2Re = new Regex(@"(\d+)\s*(?:min|分钟|分)", RegexOptions.Compiled);
         static readonly Regex TagRe = new Regex(@"[【\[]\s*([^】\]]+?)\s*[】\]]", RegexOptions.Compiled);
-        static readonly Regex PovHeadRe = new Regex(@"^\s*(?:pov|第一视角|车载视角|机位)\s*[:：]?\s*$", RegexOptions.Compiled | RegexOptions.IgnoreCase);
+        // POV 段标题词：可带【】。允许出现在行首，也允许出现在行中（「…苏E05160D  和【POV】共计 2 个」）
+        static readonly Regex PovWordRe = new Regex(@"(?:【\s*)?(?:pov|第一视角|车载视角|机位)(?:\s*】)?", RegexOptions.Compiled | RegexOptions.IgnoreCase);
+        // 标题词后面的计数尾巴：共 4 个 / 共计 2 个 / 4 个（括号、标点随后剥掉）
+        static readonly Regex PovTailRe = new Regex(@"^(?:共|共计|合计|总计)?\d*个?$", RegexOptions.Compiled);
+        // 列表序号：1. 2、  以及紧贴标签的 2【4K】
+        static readonly Regex PovIndexDotRe = new Regex(@"^\d{1,3}\s*[.、)．]\s*", RegexOptions.Compiled);
+        static readonly Regex PovIndexTagRe = new Regex(@"^\d{1,3}\s*(?=[【\[])", RegexOptions.Compiled);
+        // 片段时长：70min / 1h05min / 1小时30分
+        static readonly Regex PovDurRe = new Regex(@"(?:(\d+)\s*(?:h|H|小时|时)\s*(?:(\d+)\s*(?:min|分钟|分))?|(\d+)\s*(?:min|分钟|分))", RegexOptions.Compiled);
         // 日期：完整（含年）+ 月日
         static readonly Regex FullDateRe = new Regex(@"(20\d{2})\s*[.\-/年_]\s*(\d{1,2})\s*[.\-/月_]\s*(\d{1,2})\s*日?", RegexOptions.Compiled);
         static readonly Regex FullDateCompactRe = new Regex(@"(?<![0-9])(20\d{2})(\d{2})(\d{2})(?![0-9])", RegexOptions.Compiled);
         static readonly Regex MonthDayRe = new Regex(@"(?<![0-9])(\d{1,2})\s*[.．/月\-_]\s*(\d{1,2})\s*日?(?![0-9])", RegexOptions.Compiled);
-        static readonly Regex SegSplitRe = new Regex(@"\s*[-—–~～→至]+\s*", RegexOptions.Compiled);
+        static readonly Regex SegSplitRe = new Regex(@"\s*[-—–~～→>至]+\s*", RegexOptions.Compiled);
         static readonly Regex LineHintRe = new Regex(@"\d|路|线|快|慢|专|环|区间|观光|BRT|地铁|轨交|城铁|轻轨", RegexOptions.Compiled);
         static readonly Regex RouteVehRe = new Regex(@"^(.*?)[_\-—–]([A-Za-z]{0,2}\d{3,6}[A-Za-z]?)$", RegexOptions.Compiled);
         static readonly Regex SpaceRe = new Regex(@"[ \t]+", RegexOptions.Compiled);
@@ -508,38 +516,133 @@ namespace TripBook
             return !string.IsNullOrEmpty(tok) && LineHintRe.IsMatch(tok);
         }
 
+        // 行中 POV 标题的引导词：和【POV】共计 2 个 / 以及 POV 2 个
+        static readonly string[] PovConnectors = { "和", "与", "及", "以及", "还有", "另外", "加上", "共", "共计" };
+
+        /// <summary>车号：纯数字/字母车号之外，还认车牌（苏E02574D）、车队编号（4-10740）、资产码（S2R-0066）。</summary>
+        static readonly Regex PlateRe = new Regex(@"^[\u4e00-\u9fa5][A-Za-z][A-Za-z0-9]{4,6}$", RegexOptions.Compiled);
+        static readonly Regex FleetNoRe = new Regex(@"^\d{1,3}-\d{3,7}$", RegexOptions.Compiled);
+        static readonly Regex AssetNoRe = new Regex(@"^[A-Za-z0-9]{1,5}-[A-Za-z0-9]{3,6}$", RegexOptions.Compiled);
+
+        static bool IsPovVehicleToken(string tok)
+        {
+            if (string.IsNullOrEmpty(tok)) return false;
+            if (IsVehicleToken(tok)) return true;
+            return PlateRe.IsMatch(tok) || FleetNoRe.IsMatch(tok) || AssetNoRe.IsMatch(tok);
+        }
+
+        /// <summary>取出片段时长（分钟）并从文本里删掉。</summary>
+        static int? TakePovDur(ref string text)
+        {
+            var m = PovDurRe.Match(text);
+            if (!m.Success) return null;
+            int h = m.Groups[1].Success ? int.Parse(m.Groups[1].Value) : 0;
+            int mi = m.Groups[2].Success ? int.Parse(m.Groups[2].Value)
+                   : (m.Groups[3].Success ? int.Parse(m.Groups[3].Value) : 0);
+            text = SpaceRe.Replace((text.Substring(0, m.Index) + " " + text.Substring(m.Index + m.Length)).Trim(), " ").Trim();
+            return h * 60 + mi;
+        }
+
+        /// <summary>标题词后面的部分是否只是计数/标点（「共 4 个」「:」「(共 4 个):」）。</summary>
+        static bool IsPovCountTail(string tail)
+        {
+            if (tail == null) return true;
+            var t = Norm(tail);
+            var chars = new System.Text.StringBuilder(t.Length);
+            foreach (var c in t)
+            {
+                if (" \t:：,，-—–|、/()".IndexOf(c) >= 0) continue;
+                chars.Append(c);
+            }
+            return PovTailRe.IsMatch(chars.ToString());
+        }
+
+        /// <summary>
+        /// 识别 POV 段标题，允许三种形态：行首「POV：」、带计数「POV（共 4 个）：」、行中出现「…和【POV】共计 2 个」。
+        /// prefix 返回标题词之前的内容（行中标题时才有）。
+        /// </summary>
+        static bool TrySplitPovHeader(string line, out string prefix)
+        {
+            prefix = null;
+            if (string.IsNullOrEmpty(line)) return false;
+
+            var m = PovWordRe.Match(line);
+            if (!m.Success) return false;
+
+            bool atStart = true;
+            for (int i = 0; i < m.Index; i++)
+                if (line[i] != ' ' && line[i] != '\t') { atStart = false; break; }
+            bool bracketed = m.Value[0] == '【' || m.Value[0] == '[';
+            if (!atStart && !bracketed)
+            {
+                // 行中裸词只认「和 POV 共计 2 个」这类连词引导，避免正文里的「拍了段POV」把整篇切成 POV 段
+                var before = Norm(line.Substring(0, m.Index));
+                var cut = before.LastIndexOf(' ');
+                var prevTok = cut >= 0 ? before.Substring(cut + 1) : before;
+                if (Array.IndexOf(PovConnectors, prevTok) < 0) return false;
+            }
+
+            if (!IsPovCountTail(line.Substring(m.Index + m.Length))) return false;
+
+            prefix = Norm(line.Substring(0, m.Index));
+            // 「…苏E05160D  和【POV】共计 2 个」：剥掉标题前充当连词的词
+            bool stripped = true;
+            while (stripped && prefix.Length > 0)
+            {
+                stripped = false;
+                foreach (var w in new[] { "以及", "还有", "另外", "加上", "和", "与", "及" })
+                {
+                    var pat = " " + w;
+                    if (!prefix.EndsWith(pat, StringComparison.Ordinal)) continue;
+                    prefix = prefix.Substring(0, prefix.Length - pat.Length).Trim();
+                    stripped = true;
+                    break;
+                }
+            }
+            return true;
+        }
+
         public static PovItem ParsePovLine(string line)
         {
             var raw = Norm(line);
             if (raw == "") return null;
 
+            // 列表序号不是线路：1.昆山… / 2【4K广角】…
+            raw = PovIndexTagRe.Replace(PovIndexDotRe.Replace(raw, ""), "");
+
             var tags = TagRe.Matches(raw).Cast<Match>().Select(x => x.Groups[1].Value.Trim()).ToList();
             var text = Norm(TagRe.Replace(raw, " "));
-            if (text == "") return null;
+
+            int? dur = TakePovDur(ref text);
 
             string vehicle = "";
             var toks = text.Split(new[] { ' ' }, StringSplitOptions.RemoveEmptyEntries).ToList();
-            if (toks.Count >= 2 && IsVehicleToken(toks[toks.Count - 1]))
+            if (toks.Count >= 1 && IsPovVehicleToken(toks[toks.Count - 1]))
             {
                 vehicle = toks[toks.Count - 1];
                 toks.RemoveAt(toks.Count - 1);
-                text = string.Join(" ", toks);
+                text = string.Join(" ", toks).Trim();
             }
+            if (text == "" && vehicle == "" && tags.Count == 0) return null;
 
-            string segFrom = "", segTo = "";
-            var parts = SegSplitRe.Split(text, 2);   // 兼容 - 与 -- 分隔符
+            string segFrom = "", segTo = "", route;
+            var parts = SegSplitRe.Split(text, 2);   // 兼容 - 与 -- 与 -> 分隔符
             var head = parts[0].Trim();
             if (parts.Length == 2) segTo = parts[1].Trim(' ', ',', '，', '、', '-', '—', '–');
 
             var htoks = head.Split(new[] { ' ' }, StringSplitOptions.RemoveEmptyEntries).ToList();
-            string route = head;
-            if (htoks.Count >= 2 && LooksLikeLine(htoks[0]))
+            if (parts.Length == 2 && htoks.Count >= 2 && LooksLikeLine(htoks[0]))
             {
-                route = htoks[0];
+                route = htoks[0];                                  // 「313 甲-乙」：线路 + 起点
                 segFrom = string.Join(" ", htoks.Skip(1));
             }
+            else if (parts.Length == 2 && !LooksLikeLine(head) && HanRe.IsMatch(head))
+            {
+                route = "";                                        // 「甲->乙」：只有起讫（上一条的续行）
+                segFrom = head;
+            }
+            else route = head;
             route = CleanRoute(route);
-            if (route == "" && vehicle == "") return null;
 
             return new PovItem
             {
@@ -548,8 +651,41 @@ namespace TripBook
                 from = segFrom,
                 to = segTo,
                 vehicle = vehicle,
+                dur_min = dur,
                 raw = line.Trim()
             };
+        }
+
+        /// <summary>
+        /// 把一行 POV 内容并入片段列表：通常是新片段，也可能是上一条的续行
+        /// （车号单独折行「苏E02574D」、起讫单独折行「昆山南站->轨道交通光明路站 70min」）。
+        /// </summary>
+        static void AddPovLine(string line, List<PovItem> pov)
+        {
+            var item = ParsePovLine(line);
+            if (item == null) return;
+
+            var last = pov.Count > 0 ? pov[pov.Count - 1] : null;
+
+            if (last != null && item.line == "" && item.from == "" && item.vehicle != "" &&
+                string.IsNullOrEmpty(last.vehicle))
+            {
+                last.vehicle = item.vehicle;
+                if (last.dur_min == null) last.dur_min = item.dur_min;
+                last.raw = (last.raw + " " + item.raw).Trim();
+                return;
+            }
+
+            if (last != null && item.line == "" && item.HasSegment && !last.HasSegment)
+            {
+                last.from = item.from;
+                last.to = item.to;
+                if (item.dur_min != null) last.dur_min = item.dur_min;
+                last.raw = (last.raw + " " + item.raw).Trim();
+                return;
+            }
+
+            pov.Add(item);
         }
 
         // ------------------------------------------------------------ 标题 / 日期
@@ -594,15 +730,23 @@ namespace TripBook
                 var line = Norm(rawLine);
                 if (line == "" || RuleLineRe.IsMatch(line)) continue;
 
-                if (PovHeadRe.IsMatch(line)) { inPov = true; continue; }
+                // POV 段标题：行首，或行中（「…苏E05160D  和【POV】共计 2 个」）
+                string povPre;
+                if (TrySplitPovHeader(line, out povPre))
+                {
+                    bool wasPov = inPov;
+                    inPov = true;
+                    if (povPre == "") continue;
+                    if (!wasPov) { notes.Add(povPre); continue; }   // 段外的前缀不是 POV 内容
+                    line = povPre;
+                }
 
                 if (inPov)
                 {
                     if (TotalRe.IsMatch(line) && !TimeAnyRe.IsMatch(line)) inPov = false;
                     else
                     {
-                        var item = ParsePovLine(line);
-                        if (item != null) pov.Add(item);
+                        AddPovLine(line, pov);
                         continue;
                     }
                 }

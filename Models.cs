@@ -34,7 +34,12 @@ namespace TripBook
         public string from { get; set; } = "";
         public string to { get; set; } = "";
         public string vehicle { get; set; } = "";
+        /// <summary>片段时长（分钟），来自记录里的「70min」这类写法，可缺省</summary>
+        public int? dur_min { get; set; }
         public string raw { get; set; } = "";
+
+        public string DurText { get { return dur_min == null ? "" : Fmt.Duration(dur_min); } }
+        public bool HasDur { get { return dur_min != null; } }
 
         public string Segment
         {
@@ -83,7 +88,7 @@ namespace TripBook
             j.pov = pov.Select(p => new PovItem
             {
                 tag = p.tag, line = p.line, from = p.from, to = p.to,
-                vehicle = p.vehicle, raw = p.raw
+                vehicle = p.vehicle, dur_min = p.dur_min, raw = p.raw
             }).ToList();
             j.notes = new List<string>(notes);
             j.summary = new SummaryInfo
@@ -158,6 +163,7 @@ namespace TripBook
         public string Segment { get; set; } = "";
         public string Vehicle { get; set; } = "";
         public string Tag { get; set; } = "";
+        public string Dur { get; set; } = "";
     }
 
     /// <summary>跨行程的 POV 总结（纯逻辑，可在无 WPF 环境下测试）</summary>
@@ -197,7 +203,8 @@ namespace TripBook
                         Line = ln,
                         Segment = p.Segment ?? "",
                         Vehicle = vh,
-                        Tag = p.tag ?? ""
+                        Tag = p.tag ?? "",
+                        Dur = p.DurText ?? ""
                     });
                 }
             }
@@ -217,7 +224,7 @@ namespace TripBook
             if (minutes == null) return "—";
             int m = Math.Max(0, minutes.Value);
             int h = m / 60, r = m % 60;
-            if (h > 0 && r > 0) return h + "h" + r + "min";
+            if (h > 0 && r > 0) return h + "h" + r.ToString("00") + "min";
             if (h > 0) return h + "h00min";
             return r + "min";
         }
