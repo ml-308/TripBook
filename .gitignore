@@ -14,6 +14,8 @@ data/
 
 # 开发临时文件
 _shot*.png
+_verify*.png
+_fix*.png
 docs_screenshot.png
 *.tmp
 
