@@ -159,8 +159,9 @@ namespace TripBook
             }
 
             var st = new JourneyStats(j.entries);
+            var markerTxt = st.MarkerCount > 0 ? " · " + st.MarkerCount + " 个标记" : "";
             StatusText.Text = "✓ 识别到 " + n + " 条记录 · " + np + " 条 POV · 时长 " +
-                              Fmt.Duration(st.DurationMin) + " · 花费 ¥" + Fmt.Money(st.Fare);
+                              Fmt.Duration(st.DurationMin) + " · 花费 ¥" + Fmt.Money(st.Fare) + markerTxt;
             StatusText.Foreground = Palette.Brush(Palette.Teal);
             BuildPreview(j);
         }

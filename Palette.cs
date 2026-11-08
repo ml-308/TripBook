@@ -64,11 +64,13 @@ namespace TripBook
             return Brush(LineColorString(name));
         }
 
-        /// <summary>动作对应颜色：上车蓝、下车青</summary>
+        /// <summary>动作对应颜色：上车/进站蓝系、下车/出站青紫系</summary>
         public static string ActionColor(string action)
         {
             if (action == "上车") return Accent;
+            if (action == "进站") return Sky;
             if (action == "下车") return Teal;
+            if (action == "出站") return Violet;
             return TextDim;
         }
     }

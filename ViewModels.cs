@@ -87,9 +87,22 @@ namespace TripBook
         public Brush DotBrush { get; set; }
         public bool ShowRailTop { get; set; }
         public bool ShowRailBottom { get; set; }
+        public bool IsMarker { get; set; }
+        public string MarkerText { get; set; } = "";
 
         public static EntryVm Build(ItineraryEntry e, bool first, bool last)
         {
+            if (e.marker)
+            {
+                return new EntryVm
+                {
+                    Time = e.time,
+                    IsMarker = true,
+                    MarkerText = e.station,
+                    ShowRailTop = false,
+                    ShowRailBottom = false
+                };
+            }
             var color = Palette.ActionColor(e.action);
             var lc = Palette.LineColorString(e.line);
             return new EntryVm
@@ -137,12 +150,10 @@ namespace TripBook
         public List<StatVm> Stats { get; set; } = new List<StatVm>();
         public List<ChainVm> Chain { get; set; } = new List<ChainVm>();
         public List<EntryVm> Entries { get; set; } = new List<EntryVm>();
-        public List<WaitItem> Waits { get; set; } = new List<WaitItem>();
         public List<PovVm> Pov { get; set; } = new List<PovVm>();
         public List<string> Notes { get; set; } = new List<string>();
 
         public bool HasChain { get { return Chain.Count > 0; } }
-        public bool HasWaits { get { return Waits.Count > 0; } }
         public bool HasPov { get { return Pov.Count > 0; } }
         public bool HasNotes { get { return Notes.Count > 0; } }
 
@@ -211,14 +222,6 @@ namespace TripBook
                 Hint = st.Lines.Count > 0 ? st.Lines[0] + " 起" : "",
                 Accent = Palette.Brush(Palette.Violet)
             });
-            if (st.AvgWait != null)
-                vm.Stats.Add(new StatVm
-                {
-                    Value = Fmt.Duration(st.AvgWait),
-                    Label = "平均候车",
-                    Hint = "最长 " + Fmt.Duration(st.MaxWait),
-                    Accent = Palette.Brush(Palette.Sky)
-                });
 
             for (int i = 0; i < st.Rides.Count; i++)
             {
@@ -241,8 +244,6 @@ namespace TripBook
             for (int i = 0; i < ordered.Count; i++)
                 vm.Entries.Add(EntryVm.Build(ordered[i], i == 0, i == ordered.Count - 1));
 
-            vm.Waits = st.Waits;
-
             foreach (var p in j.pov)
                 vm.Pov.Add(new PovVm
                 {
@@ -254,6 +255,63 @@ namespace TripBook
                 });
 
             vm.Notes = j.notes;
+            return vm;
+        }
+    }
+
+    /// <summary>总览页：行程日期分布图所需数据</summary>
+    public class DashBarVm
+    {
+        public string Date { get; set; } = "";
+        public int Count { get; set; }
+        public int BarWidth { get; set; }
+        public Brush Brush { get; set; }
+        public string CountText { get { return Count + " 条"; } }
+    }
+
+    public class DashboardVm
+    {
+        public int JourneyCount { get; set; }
+        public int RecordCount { get; set; }
+        public string FirstDate { get; set; } = "—";
+        public string LastDate { get; set; } = "—";
+        public string DateRange { get { return FirstDate + "  ~  " + LastDate; } }
+        public List<DashBarVm> Bars { get; set; } = new List<DashBarVm>();
+        public bool HasBars { get { return Bars.Count > 0; } }
+
+        public static DashboardVm Build(List<Journey> all)
+        {
+            var vm = new DashboardVm();
+            vm.JourneyCount = all.Count;
+            vm.RecordCount = all.Sum(j => j.entries.Count(e => !e.marker));
+
+            var byDate = new Dictionary<string, int>();
+            foreach (var j in all)
+                foreach (var e in j.entries)
+                    if (!e.marker && !string.IsNullOrEmpty(e.time))
+                    {
+                        if (!byDate.ContainsKey(j.date)) byDate[j.date] = 0;
+                        byDate[j.date]++;
+                    }
+
+            var sorted = byDate.OrderBy(k => k.Key).ToList();
+            int max = sorted.Count > 0 ? sorted.Max(k => k.Value) : 1;
+            const int maxW = 440;
+            foreach (var k in sorted)
+            {
+                vm.Bars.Add(new DashBarVm
+                {
+                    Date = k.Key.Length >= 10 ? k.Key.Substring(5) : k.Key,
+                    Count = k.Value,
+                    BarWidth = max <= 0 ? 0 : Math.Max(6, (int)(maxW * k.Value / (double)max)),
+                    Brush = Palette.Brush(Palette.LineColorString(k.Key))
+                });
+            }
+            if (sorted.Count > 0)
+            {
+                vm.FirstDate = Fmt.DateCn(sorted.First().Key);
+                vm.LastDate = Fmt.DateCn(sorted.Last().Key);
+            }
             return vm;
         }
     }

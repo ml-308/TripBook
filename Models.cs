@@ -16,9 +16,12 @@ namespace TripBook
         public string vehicle { get; set; } = "";
         public decimal? fare { get; set; }
         public string note { get; set; } = "";
+        /// <summary>是否为「时间标记」行（如换乘优惠刷新），不参与上下车统计</summary>
+        public bool marker { get; set; }
 
-        public bool IsBoard { get { return action == "上车"; } }
-        public bool IsAlight { get { return action == "下车"; } }
+        public bool IsBoard { get { return action == "上车" || action == "进站"; } }
+        public bool IsAlight { get { return action == "下车" || action == "出站"; } }
+        public bool IsMarker { get { return marker; } }
         public string TimeDisp { get { return time; } }
         public string DayMark { get { return day > 0 ? "+" + day + "天" : ""; } }
     }
@@ -75,7 +78,7 @@ namespace TripBook
             {
                 time = e.time, day = e.day, abs_min = e.abs_min, station = e.station,
                 action = e.action, line = e.line, vehicle = e.vehicle,
-                fare = e.fare, note = e.note
+                fare = e.fare, note = e.note, marker = e.marker
             }).ToList();
             j.pov = pov.Select(p => new PovItem
             {
@@ -91,14 +94,6 @@ namespace TripBook
         }
     }
 
-    public class WaitItem
-    {
-        public ItineraryEntry From { get; set; }
-        public ItineraryEntry To { get; set; }
-        public int Minutes { get; set; }
-        public string Range { get { return From.time + " → " + To.time; } }
-    }
-
     /// <summary>统计指标</summary>
     public class JourneyStats
     {
@@ -111,15 +106,15 @@ namespace TripBook
         public List<ItineraryEntry> Rides { get; private set; } = new List<ItineraryEntry>();
         public List<string> Lines { get; private set; } = new List<string>();
         public List<string> Vehicles { get; private set; } = new List<string>();
-        public List<WaitItem> Waits { get; private set; } = new List<WaitItem>();
-        public double? AvgWait { get; private set; }
-        public int? MaxWait { get; private set; }
         public int Transfers { get { return Math.Max(0, Rides.Count - 1); } }
+        public int MarkerCount { get; private set; }
 
         public JourneyStats(IEnumerable<ItineraryEntry> entries)
         {
-            var rows = (entries ?? Enumerable.Empty<ItineraryEntry>())
-                .Where(e => !string.IsNullOrEmpty(e.time))
+            var all = (entries ?? Enumerable.Empty<ItineraryEntry>()).ToList();
+            MarkerCount = all.Count(e => e.marker);
+            var rows = all
+                .Where(e => !string.IsNullOrEmpty(e.time) && !e.marker)
                 .OrderBy(e => e.abs_min)
                 .ToList();
             Count = rows.Count;
@@ -128,7 +123,7 @@ namespace TripBook
                 Start = rows[0].time;
                 End = rows[rows.Count - 1].time;
             }
-            Rides = rows.Where(e => e.action == "上车").ToList();
+            Rides = rows.Where(e => e.action == "上车" || e.action == "进站").ToList();
             if (rows.Count >= 2)
                 DurationMin = Math.Max(0, rows[rows.Count - 1].abs_min - rows[0].abs_min);
 
@@ -141,18 +136,6 @@ namespace TripBook
                 if (ln.Length > 0 && !Lines.Contains(ln)) Lines.Add(ln);
                 var vh = (e.vehicle ?? "").Trim();
                 if (vh.Length > 0 && !Vehicles.Contains(vh)) Vehicles.Add(vh);
-            }
-
-            for (int i = 1; i < Rides.Count; i++)
-            {
-                int d = Rides[i].abs_min - Rides[i - 1].abs_min;
-                if (d < 0) d += 24 * 60;
-                Waits.Add(new WaitItem { From = Rides[i - 1], To = Rides[i], Minutes = d });
-            }
-            if (Waits.Count > 0)
-            {
-                AvgWait = Waits.Average(w => w.Minutes);
-                MaxWait = Waits.Max(w => w.Minutes);
             }
         }
 

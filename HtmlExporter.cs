@@ -34,7 +34,6 @@ namespace TripBook
             stats.Add(Tuple.Create("乘车次数", st.Rides.Count + " 次", Palette.Teal));
             stats.Add(Tuple.Create("总花费", "¥ " + Fmt.Money(st.Fare), Palette.Amber));
             stats.Add(Tuple.Create("线路 / 车辆", st.Lines.Count + " / " + st.Vehicles.Count, Palette.Violet));
-            if (st.AvgWait != null) stats.Add(Tuple.Create("平均候车", Fmt.Duration(st.AvgWait), Palette.Sky));
 
             var statsHtml = string.Join("", stats.Select(t =>
                 "<div class=\"stat\"><div class=\"stat-v\" style=\"color:" + t.Item3 + "\">" + E(t.Item2) +
@@ -76,23 +75,6 @@ namespace TripBook
                 chain.Append("<div class=\"chip\" style=\"border-color:" + c + "55;color:" + c + "\">" + E(ln) +
                              "<small>" + E(r.vehicle) + "</small></div>");
                 if (i < st.Rides.Count - 1) chain.Append("<div class=\"arrow\">→</div>");
-            }
-
-            // 候车间隔
-            string waitsHtml = "";
-            if (st.Waits.Count > 0)
-            {
-                int peak = Math.Max(1, st.Waits.Max(w => w.Minutes));
-                var bars = new StringBuilder();
-                foreach (var w in st.Waits)
-                {
-                    int pct = Math.Max(3, (int)Math.Round(w.Minutes * 100.0 / peak));
-                    bars.Append("<div class=\"wrow\"><span class=\"mono dim\">" + E(w.Range) +
-                                "</span><span class=\"wbar\"><i style=\"width:" + pct + "%\"></i></span>" +
-                                "<span class=\"mono\" style=\"color:" + Palette.TextSub + "\">" +
-                                Fmt.Duration(w.Minutes) + "</span></div>");
-                }
-                waitsHtml = "\n  <section><h2>候车间隔</h2><div class=\"waits\">" + bars + "</div></section>";
             }
 
             // POV
@@ -158,11 +140,6 @@ namespace TripBook
   .chip{border:1px solid;border-radius:10px;padding:8px 12px;font-size:14px;font-weight:700;background:#ffffff08;display:flex;flex-direction:column;line-height:1.2}
   .chip small{font-size:10px;color:var(--dim);font-weight:400;margin-top:3px}
   .arrow{color:#3a4658;font-size:14px}
-  .waits{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:12px 16px}
-  .wrow{display:flex;align-items:center;gap:10px;padding:5px 0}
-  .wrow .mono{font-size:11px;width:104px;flex:none}
-  .wbar{flex:1;height:8px;background:#ffffff0a;border-radius:4px;overflow:hidden}
-  .wbar i{display:block;height:100%;border-radius:4px;background:linear-gradient(90deg,__ACCENT__,__TEAL__)}
   .pov{list-style:none;padding:0;margin:0;display:flex;flex-direction:column;gap:8px}
   .pov li{background:var(--card);border:1px solid var(--border);border-radius:10px;padding:11px 14px}
   .pov-head{display:flex;gap:8px;align-items:center;flex-wrap:wrap;font-size:13px}
@@ -170,7 +147,7 @@ namespace TripBook
   .pov-seg{color:var(--sub);font-size:12px;margin-top:5px}
   .notes{background:var(--card);border:1px solid var(--border);border-radius:10px;padding:12px 14px;color:var(--sub);font-size:13px;line-height:1.8}
   footer{margin-top:44px;border-top:1px solid var(--border);padding-top:16px;color:var(--dim);font-size:11px;display:flex;justify-content:space-between}
-  @media print{body{background:#fff;color:#111}.card,.stat,.waits,.pov li,.notes{background:#fafafa}}
+  @media print{body{background:#fff;color:#111}.card,.stat,.pov li,.notes{background:#fafafa}}
 </style></head>
 <body><div class=""wrap"">
   <header>
@@ -184,7 +161,6 @@ namespace TripBook
     __ROWS__
   </section>
   __CHAIN__
-  __WAITS__
   __POV__
   __NOTES__
   <footer><span>由 行程簿 TripBook 生成</span><span class=""mono"">__GENERATED__</span></footer>
@@ -201,7 +177,6 @@ namespace TripBook
                     .Replace("__STATS__", statsHtml)
                     .Replace("__ROWS__", rows.ToString())
                     .Replace("__CHAIN__", chainHtml)
-                    .Replace("__WAITS__", waitsHtml)
                     .Replace("__POV__", povHtml)
                     .Replace("__NOTES__", notesHtml)
                     .Replace("__GENERATED__", DateTime.Now.ToString("yyyy-MM-dd HH:mm")));

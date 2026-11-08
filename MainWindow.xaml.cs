@@ -33,6 +33,8 @@ namespace TripBook
 
             RestoreWindow();
             RefreshList(null);
+            if (_store.Journeys.Count > 0)
+                ShowDashboard();
             if (!string.IsNullOrEmpty(_store.LastError))
                 Dispatcher.BeginInvoke(new Action(() => ShowToast(_store.LastError)), DispatcherPriority.Background);
         }
@@ -137,6 +139,53 @@ namespace TripBook
                 ? "换个关键词，或者清空搜索框看全部"
                 : "粘贴随手记的行程文本，自动整理成时间轴、线路链与统计";
             SearchHint.Visibility = string.IsNullOrEmpty(SearchBox.Text) ? Visibility.Visible : Visibility.Collapsed;
+        }
+
+        void ShowDashboard()
+        {
+            DashScroll.DataContext = DashboardVm.Build(_store.Journeys);
+            DashScroll.Visibility = Visibility.Visible;
+            DetailScroll.Visibility = Visibility.Collapsed;
+            EmptyPanel.Visibility = Visibility.Collapsed;
+            DashScroll.ScrollToTop();
+        }
+
+        void Overview_Click(object sender, RoutedEventArgs e) => ShowDashboard();
+
+        void Import_Click(object sender, RoutedEventArgs e)
+        {
+            var dlg = new Microsoft.Win32.OpenFileDialog
+            {
+                Title = "导入行程文本（可多选）",
+                Filter = "文本文件 (*.txt)|*.txt|所有文件 (*.*)|*.*",
+                Multiselect = true,
+                InitialDirectory = Environment.GetFolderPath(Environment.SpecialFolder.Desktop)
+            };
+            if (dlg.ShowDialog(this) != true) return;
+
+            int added = 0, skipped = 0;
+            foreach (var file in dlg.FileNames)
+            {
+                string text;
+                try { text = File.ReadAllText(file, Encoding.UTF8); }
+                catch { skipped++; continue; }
+                if (string.IsNullOrWhiteSpace(text)) { skipped++; continue; }
+                var j = ItineraryParser.Parse(text);
+                if (j.entries.Count == 0) { skipped++; continue; }
+                _store.Add(j);
+                added++;
+            }
+
+            if (added > 0)
+            {
+                RefreshList(null);
+                ShowDashboard();
+                ShowToast("已导入 " + added + " 个行程" + (skipped > 0 ? "（" + skipped + " 个文件跳过）" : ""));
+            }
+            else if (skipped > 0)
+            {
+                ShowToast("没有可导入的行程（" + skipped + " 个文件跳过）");
+            }
         }
 
         void UpdateDirLabel()
@@ -342,9 +391,10 @@ namespace TripBook
         void About()
         {
             Dialogs.Info(this, "关于",
-                "行程簿 TripBook 1.0\n\n本地行程记录工具\n" +
+                "行程簿 TripBook 1.1.0\n\n本地行程记录工具\n" +
                 "· 数据保存在：" + _store.DataDir + "\n" +
-                "· 粘贴文本自动解析、时间轴展示、网页导出\n\n" +
+                "· 粘贴文本智能解析、时间轴展示、总览日期分布、网页导出\n" +
+                "· 支持导入 .txt（可批量）\n\n" +
                 "快捷键：Ctrl+N 新建 · Ctrl+F 搜索 · Ctrl+E 导出 · F5 刷新");
         }
 
