@@ -21,6 +21,7 @@ namespace TripBook
         readonly DispatcherTimer _toastTimer;
         string _currentId = "";
         string _filter = "";
+        bool _suppressSel = false;
 
         public MainWindow()
         {
@@ -114,6 +115,7 @@ namespace TripBook
 
         void JourneyList_SelectionChanged(object sender, SelectionChangedEventArgs e)
         {
+            if (_suppressSel) return;
             var vm = JourneyList.SelectedItem as ListItemVm;
             if (vm == null) { ShowEmpty(false); return; }
             _currentId = vm.J.id;
@@ -126,6 +128,7 @@ namespace TripBook
         {
             DetailScroll.DataContext = JourneyVm.Build(j);
             DetailScroll.Visibility = Visibility.Visible;
+            DashScroll.Visibility = Visibility.Collapsed;
             EmptyPanel.Visibility = Visibility.Collapsed;
             DetailScroll.ScrollToTop();
         }
@@ -133,6 +136,7 @@ namespace TripBook
         void ShowEmpty(bool searching)
         {
             DetailScroll.Visibility = Visibility.Collapsed;
+            DashScroll.Visibility = Visibility.Collapsed;
             EmptyPanel.Visibility = Visibility.Visible;
             EmptyTitle.Text = searching ? "没有匹配的行程" : "还没有行程记录";
             EmptySub.Text = searching
@@ -147,6 +151,10 @@ namespace TripBook
             DashScroll.Visibility = Visibility.Visible;
             DetailScroll.Visibility = Visibility.Collapsed;
             EmptyPanel.Visibility = Visibility.Collapsed;
+            _currentId = "";
+            _suppressSel = true;
+            JourneyList.SelectedItem = null;
+            _suppressSel = false;
             DashScroll.ScrollToTop();
         }
 
@@ -391,7 +399,7 @@ namespace TripBook
         void About()
         {
             Dialogs.Info(this, "关于",
-                "行程簿 TripBook 1.1.0\n\n本地行程记录工具\n" +
+                "行程簿 TripBook 1.1.1\n\n本地行程记录工具\n" +
                 "· 数据保存在：" + _store.DataDir + "\n" +
                 "· 粘贴文本智能解析、时间轴展示、总览日期分布、网页导出\n" +
                 "· 支持导入 .txt（可批量）\n\n" +
