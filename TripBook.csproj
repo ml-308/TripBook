@@ -10,9 +10,9 @@
     <RootNamespace>TripBook</RootNamespace>
     <ApplicationIcon>icon.ico</ApplicationIcon>
 
-    <Version>1.3.0</Version>
-    <AssemblyVersion>1.3.0.0</AssemblyVersion>
-    <FileVersion>1.3.0.0</FileVersion>
+    <Version>1.4.0</Version>
+    <AssemblyVersion>1.4.0.0</AssemblyVersion>
+    <FileVersion>1.4.0.0</FileVersion>
     <Product>行程簿 TripBook</Product>
     <AssemblyTitle>行程簿 TripBook</AssemblyTitle>
     <Description>本地行程记录与管理</Description>
